@@ -1,0 +1,66 @@
+{
+  "color": {
+    "bg": {
+      "page": {
+        "dark": "#0B0C0F"
+      },
+      "surface": "#12141A"
+    },
+    "text": {
+      "primary": "#E6E8F0",
+      "secondary": "#A7B0C0"
+    },
+    "brand": {
+      "primary": "#7C5CFF"
+    },
+    "accent": {
+      "success": "#2ECC71",
+      "warning": "#F4C542",
+      "error": "#FF5C5C"
+    },
+    "border": {
+      "muted": "#2A2F3A"
+    }
+  },
+  "typography": {
+    "fontFamily": "Inter",
+    "sizes": [
+      28,
+      20,
+      16,
+      14,
+      12
+    ]
+  },
+  "spacing": [
+    0,
+    4,
+    8,
+    12,
+    16,
+    20,
+    24,
+    28,
+    32
+  ],
+  "radii": [
+    8,
+    12,
+    20,
+    28
+  ],
+  "shadow": "0 4 12 / 0.2",
+  "animation": {
+    "durations": [
+      150,
+      250,
+      400
+    ],
+    "easing": [
+      0.2,
+      0.8,
+      0.2,
+      1
+    ]
+  }
+}
