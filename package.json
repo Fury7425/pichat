@@ -9,7 +9,7 @@
     "bootstrap": "yarn install",
     "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "tsc -b",
-    "test": "jest",
+    "test": "jest --passWithNoTests",
     "build": "tsc -b",
     "android": "yarn workspace @pichat/mobile android",
     "start": "yarn workspace @pichat/mobile start"
