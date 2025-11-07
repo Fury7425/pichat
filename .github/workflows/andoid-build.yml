@@ -30,13 +30,24 @@ jobs:
       - name: Unit tests
         run: yarn test
 
+      - name: Check Android project
+        id: android-check
+        working-directory: apps/mobile
+        run: |
+          if [ -d android ] && [ -f gradlew ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Android build
+        if: steps.android-check.outputs.exists == 'true'
         working-directory: apps/mobile
         run: |
           ./gradlew assembleDebug || echo "Gradle wrapper not yet configured"
 
       - name: Upload APK artifact
-        if: success()
+        if: success() && steps.android-check.outputs.exists == 'true' && hashFiles('apps/mobile/android/app/build/outputs/**/*.apk') != ''
         uses: actions/upload-artifact@v4
         with:
           name: android-apk
