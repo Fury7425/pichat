@@ -1,0 +1,1 @@
+# Threat Model (alpha)\nAssets: keys, pre-keys, messages.\nAdversaries: passive/active network, device theft.\nMitigations: E2EE, keystore, verification.\n

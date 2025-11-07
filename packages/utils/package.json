@@ -1,0 +1,10 @@
+{
+  "name": "@pichat/utils",
+  "version": "1.0.0",
+  "license": "Apache-2.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "source": "src/index.ts",
+  "scripts": { "build": "tsc -b", "clean": "rimraf dist" },
+  "dependencies": { "ulid": "^2.3.0", "buffer": "^6.0.3" }
+}

@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2021",
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "jsx": "react-native",
+    "strict": true,
+    "noImplicitAny": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": false,
+    "types": ["node"],
+    "baseUrl": ".",
+    "lib": ["ES2021", "DOM"]
+  }
+}

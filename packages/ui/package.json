@@ -1,0 +1,10 @@
+{
+  "name": "@pichat/ui",
+  "version": "1.0.0",
+  "license": "Apache-2.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "source": "src/index.tsx",
+  "scripts": { "build": "tsc -b", "clean": "rimraf dist" },
+  "peerDependencies": { "react": ">=18", "react-native": ">=0.75" }
+}
