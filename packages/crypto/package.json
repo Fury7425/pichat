@@ -5,5 +5,20 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "source": "src/index.ts",
-  "scripts": { "build": "tsc -b", "clean": "rimraf dist" }
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@pichat/storage": "*",
+    "@pichat/types": "*",
+    "@pichat/utils": "*",
+    "@stablelib/xchacha20poly1305": "^2.0.1",
+    "argon2-browser": "^1.18.0",
+    "libsignal-protocol-typescript": "^0.0.18",
+    "react-native-keychain": "^8.1.2"
+  },
+  "peerDependencies": {
+    "react-native": ">=0.76"
+  }
 }
