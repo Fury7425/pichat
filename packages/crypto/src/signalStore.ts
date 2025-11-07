@@ -273,3 +273,18 @@ export async function persistSession(address: SignalProtocolAddress, record: str
     remotePublicKey: contact.publicKey,
     createdAt: existing?.createdAt ?? now(),
     updatedAt: now(),
+    sessionState: binaryToArrayBuffer(record)
+  };
+  await repo.sessions.save(stored);
+}
+
+export async function removeSession(address: SignalProtocolAddress): Promise<void> {
+  const contact = await repo.contacts.getByPub(address.getName());
+  if (!contact) {
+    return;
+  }
+  const existing = await repo.sessions.getByRemote(contact.publicKey);
+  if (existing) {
+    await repo.sessions.remove(existing.id);
+  }
+}
