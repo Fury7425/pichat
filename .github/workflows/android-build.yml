@@ -33,6 +33,7 @@ jobs:
 
       # --- Android toolchain ---
       - name: Set up Java (Temurin 17)
+        id: setup-java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -42,7 +43,22 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      # Only attempt build if the Gradle wrapper exists
+      # If Expo is present and android/ is missing, prebuild it on CI
+      - name: Detect Expo / Prebuild (if needed)
+        working-directory: apps/mobile
+        run: |
+          HAS_ANDROID_DIR=$([ -f android/gradlew ] && echo yes || echo no)
+          HAS_EXPO=$(
+            node -e "try{const p=require('./package.json');process.stdout.write((p.dependencies&&p.dependencies.expo)|| (p.devDependencies&&p.devDependencies.expo)?'yes':'no')}catch(e){process.stdout.write('no')}"
+          )
+
+          echo "Has android dir? $HAS_ANDROID_DIR"
+          echo "Has Expo dep?    $HAS_EXPO"
+
+          if [ "$HAS_ANDROID_DIR" = "no" ] && [ "$HAS_EXPO" = "yes" ]; then
+            npx expo prebuild --non-interactive --platform android --no-install
+          fi
+
       - name: Android build (assembleDebug)
         if: hashFiles('apps/mobile/android/gradlew') != ''
         working-directory: apps/mobile/android
@@ -65,4 +81,6 @@ jobs:
       - name: Note if Android project missing
         if: hashFiles('apps/mobile/android/gradlew') == ''
         run: |
-          echo "::warning::No Android project found at apps/mobile/android (gradlew missing). Skipping build."
+          echo "::warning::No Android project found at apps/mobile/android. \
+          If you use Expo, add it to dependencies and the job will run 'expo prebuild'. \
+          Otherwise, commit a bare React Native 'android/' folder."
