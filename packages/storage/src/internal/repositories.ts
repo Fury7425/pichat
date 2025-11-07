@@ -314,17 +314,16 @@ export const repo = {
     },
     async byConversation(conversationId: string, options: PaginationOptions = {}): Promise<MessageEnvelope[]> {
       const realm = await getRealm();
-      let results = realm
+      const results = realm
         .objects<Message>('Message')
         .filtered('conversationId == $0', conversationId)
         .sorted('sentAt');
-      if (options.before) {
-        results = results.filtered('sentAt < $0', options.before);
-      }
+      const filtered = options.before ? results.filtered('sentAt < $0', options.before) : results;
+      let messages = Array.from(filtered);
       if (options.limit) {
-        results = results.slice(Math.max(0, results.length - options.limit));
+        messages = messages.slice(Math.max(0, messages.length - options.limit));
       }
-      return results.map(mapMessage);
+      return messages.map(mapMessage);
     },
     async markRead(conversationId: string): Promise<void> {
       await write((realm) => {
