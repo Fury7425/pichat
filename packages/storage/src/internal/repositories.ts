@@ -25,12 +25,7 @@ type WriteBlock<T> = (realm: Realm) => T;
 
 async function write<T>(fn: WriteBlock<T>): Promise<T> {
   const realm = await getRealm();
-  let result: T;
-  realm.write(() => {
-    result = fn(realm);
-  });
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  return result!;
+  return realm.write(() => fn(realm));
 }
 
 function mapIdentity(object: Identity): IdentityRecord {
