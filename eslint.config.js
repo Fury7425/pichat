@@ -48,4 +48,10 @@ module.exports = [
       'react-hooks/exhaustive-deps': 'warn',
     },
   },
+  {
+    files: ['**/*.d.ts'],
+    rules: {
+      '@typescript-eslint/no-unused-vars': 'off',
+    },
+  },
 ];

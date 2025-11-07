@@ -1,12 +1,10 @@
-/* eslint-disable global-require */
 import { toBase64, fromBase64 } from '@pichat/utils';
 
 let Keychain: typeof import('react-native-keychain') | undefined;
 try {
   // React Native runtime
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   Keychain = require('react-native-keychain');
-} catch (err) {
+} catch {
   Keychain = undefined;
 }
 

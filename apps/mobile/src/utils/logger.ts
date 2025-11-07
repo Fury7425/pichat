@@ -8,23 +8,18 @@ function log(level: LogLevel, scope: string, message: string, error?: unknown): 
   const payload = error ? [`${prefix} ${message}`, error] : [`${prefix} ${message}`];
   switch (level) {
     case 'debug':
-      // eslint-disable-next-line no-console
       console.debug(...payload);
       break;
     case 'info':
-      // eslint-disable-next-line no-console
       console.info(...payload);
       break;
     case 'warn':
-      // eslint-disable-next-line no-console
       console.warn(...payload);
       break;
     case 'error':
-      // eslint-disable-next-line no-console
       console.error(...payload);
       break;
     default:
-      // eslint-disable-next-line no-console
       console.log(...payload);
   }
 }
