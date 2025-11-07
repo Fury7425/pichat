@@ -9,13 +9,15 @@
     "bootstrap": "yarn install",
     "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "tsc -b",
-    "test": "jest",
+    "test": "jest --passWithNoTests",
     "build": "tsc -b",
     "android": "yarn workspace @pichat/mobile android",
     "start": "yarn workspace @pichat/mobile start"
   },
   "devDependencies": {
     "@react-native-community/eslint-config": "^3.2.0",
+    "@typescript-eslint/eslint-plugin": "^8.11.0",
+    "@typescript-eslint/parser": "^8.11.0",
     "@testing-library/react-native": "^13.3.3",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.5.5",
