@@ -4,8 +4,8 @@ import {
   SessionBuilder,
   SessionCipher,
   SignalProtocolAddress,
-  PreKeyBundle as SignalPreKeyBundle,
-  KeyPairType
+  KeyPairType,
+  DeviceType
 } from 'libsignal-protocol-typescript';
 import { repo } from '@pichat/storage';
 import { RealmSignalProtocolStore, hydrateStoreWithSessions, persistSession } from './signalStore';
@@ -56,7 +56,19 @@ function deserializeKeyPair(serialized: Uint8Array): KeyPairType {
 }
 
 function asArrayBuffer(data: Uint8Array): ArrayBuffer {
-  return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+  if (data.buffer instanceof ArrayBuffer) {
+    return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+  }
+  const copy = data.slice();
+  return copy.buffer;
+}
+
+function binaryStringToUint8Array(input: string): Uint8Array {
+  const view = new Uint8Array(input.length);
+  for (let i = 0; i < input.length; i += 1) {
+    view[i] = input.charCodeAt(i) & 0xff;
+  }
+  return view;
 }
 
 function computeFingerprint(pubKey: ArrayBuffer): string {
@@ -88,8 +100,8 @@ export async function createIdentity(): Promise<{ pub: string; privRef: string; 
 
 async function ensureIdentity(): Promise<{ keyPair: KeyPairType; registrationId: number; fingerprint: string }> {
   await ensureReady();
-  const keyPair = signalStore.getIdentityKeyPair();
-  const registrationId = signalStore.getLocalRegistrationId();
+  const keyPair = await signalStore.getIdentityKeyPair();
+  const registrationId = await signalStore.getLocalRegistrationId();
   if (!keyPair || !registrationId) {
     throw new Error('identity not initialised');
   }
@@ -115,90 +127,7 @@ export async function createPreKeys(n: number): Promise<PreKeyBundle[]> {
     registrationId,
     identityKey: toBase64(new Uint8Array(keyPair.pubKey)),
     preKeyId: signedPreKey.keyId,
-    preKeyPublic: toBase64(new Uint8Array(signedPreKey.keyPair.pubKey)),
-    signedPreKeyId: signedPreKey.keyId,
-    signedPreKeyPublic: toBase64(new Uint8Array(signedPreKey.keyPair.pubKey)),
-    signedPreKeySignature: toBase64(new Uint8Array(signedPreKey.signature))
-  });
-
-  const baseId = Math.floor(Math.random() * 1_000_000);
-  for (let i = 0; i < n; i += 1) {
-    const preKeyId = baseId + i + 1;
-    const preKey = await KeyHelper.generatePreKey(preKeyId);
-    const record: PreKeyRecord = {
-      id: ulid(),
-      keyId: preKey.keyId,
-      type: 'one-time',
-      publicKey: toBase64(new Uint8Array(preKey.keyPair.pubKey)),
-      privateKeyRef: `opk_${ulid()}`,
-      createdAt: now()
-    };
-    await signalStore.storePreKeyRecord(record, preKey.keyPair, serializeKeyPair(preKey.keyPair));
-    bundles.push({
-      registrationId,
-      identityKey: toBase64(new Uint8Array(keyPair.pubKey)),
-      preKeyId: preKey.keyId,
-      preKeyPublic: toBase64(new Uint8Array(preKey.keyPair.pubKey)),
-      signedPreKeyId: signedPreKey.keyId,
-      signedPreKeyPublic: toBase64(new Uint8Array(signedPreKey.keyPair.pubKey)),
-      signedPreKeySignature: toBase64(new Uint8Array(signedPreKey.signature)),
-      oneTimePreKeyId: preKey.keyId,
-      oneTimePreKeyPublic: toBase64(new Uint8Array(preKey.keyPair.pubKey))
-    });
-  }
-
-  return bundles;
-}
-
-export async function exportRecoveryKit(passphrase: string): Promise<Uint8Array> {
-  const { keyPair, registrationId, fingerprint } = await ensureIdentity();
-  const identitySecret = serializeKeyPair(keyPair);
-  const preKeys = await repo.prekeys.listAll();
-  const serializedPreKeys = (
-    await Promise.all(
-      preKeys.map(async (record) => {
-        const secret = await loadSecret(record.privateKeyRef);
-        if (!secret) {
-          return undefined;
-        }
-        return {
-          record,
-          secret: toBase64(secret)
-        };
-      })
-    )
-  ).filter((entry): entry is { record: PreKeyRecord; secret: string } => Boolean(entry));
-  const payload = JSON.stringify({
-    registrationId,
-    fingerprint,
-    identitySecret: toBase64(identitySecret),
-    preKeys: serializedPreKeys
-  });
-  return seal(passphrase, new TextEncoder().encode(payload));
-}
-
-export async function importRecoveryKit(blob: Uint8Array, passphrase: string): Promise<void> {
-  await ensureReady();
-  const opened = await open(passphrase, blob);
-  const parsed = JSON.parse(new TextDecoder().decode(opened)) as {
-    registrationId: number;
-    fingerprint: string;
-    identitySecret: string;
-    preKeys?: { record: PreKeyRecord; secret: string }[];
-  };
-  const privRef = `ik_${ulid()}`;
-  const serialized = fromBase64(parsed.identitySecret);
-  const identityKeyPair = deserializeKeyPair(serialized);
-  const record: IdentityRecord = {
-    id: 'identity',
-    publicKey: toBase64(serialized.slice(32)),
-    privateKeyRef: privRef,
-    fingerprint: parsed.fingerprint,
-    registrationId: parsed.registrationId,
-    createdAt: now(),
-    updatedAt: now()
-  };
-  await signalStore.deleteIdentity();
+@@ -202,85 +214,90 @@ export async function importRecoveryKit(blob: Uint8Array, passphrase: string): P
   await signalStore.createIdentity(record, identityKeyPair, serialized);
   if (parsed.preKeys) {
     for (const entry of parsed.preKeys) {
@@ -224,7 +153,7 @@ export async function ensureSession(peerPub: string): Promise<void> {
   await ensureIdentity();
   await ensureReady();
   const address = await sessionAddress(peerPub);
-  if (signalStore.containsSession(address)) {
+  if (await signalStore.containsSession(address)) {
     return;
   }
   const bundleRecord = await repo.contacts.getByPub(peerPub);
@@ -235,20 +164,22 @@ export async function ensureSession(peerPub: string): Promise<void> {
     throw new Error('contact missing prekey bundle');
   }
   const builder = new SessionBuilder(signalStore, address);
-  const bundle: SignalPreKeyBundle = {
-    registrationId: bundleRecord.identityRegistrationId ?? 0,
+  const device: DeviceType = {
     identityKey: asArrayBuffer(fromBase64(bundleRecord.publicKey)),
-    preKeyId: bundleRecord.preKey.oneTimePreKeyId ?? bundleRecord.preKey.signedPreKeyId,
-    preKeyPublic: asArrayBuffer(
-      bundleRecord.preKey.oneTimePreKey
-        ? fromBase64(bundleRecord.preKey.oneTimePreKey)
-        : fromBase64(bundleRecord.preKey.signedPreKey)
-    ),
-    signedPreKeyId: bundleRecord.preKey.signedPreKeyId,
-    signedPreKeyPublic: asArrayBuffer(fromBase64(bundleRecord.preKey.signedPreKey)),
-    signedPreKeySignature: asArrayBuffer(fromBase64(bundleRecord.preKey.signedPreKeySignature))
-  } as SignalPreKeyBundle;
-  await builder.processPreKey(bundle);
+    signedPreKey: {
+      keyId: bundleRecord.preKey.signedPreKeyId,
+      publicKey: asArrayBuffer(fromBase64(bundleRecord.preKey.signedPreKey)),
+      signature: asArrayBuffer(fromBase64(bundleRecord.preKey.signedPreKeySignature))
+    },
+    preKey: bundleRecord.preKey.oneTimePreKey && bundleRecord.preKey.oneTimePreKeyId !== undefined
+      ? {
+          keyId: bundleRecord.preKey.oneTimePreKeyId,
+          publicKey: asArrayBuffer(fromBase64(bundleRecord.preKey.oneTimePreKey))
+        }
+      : undefined,
+    registrationId: bundleRecord.identityRegistrationId ?? undefined
+  };
+  await builder.processPreKey(device);
 }
 
 export async function encryptFor(peerPub: string, msg: Uint8Array): Promise<{ id: string; ivB64: string; ctB64: string }> {
@@ -256,14 +187,17 @@ export async function encryptFor(peerPub: string, msg: Uint8Array): Promise<{ id
   await ensureSession(peerPub);
   const address = await sessionAddress(peerPub);
   const cipher = new SessionCipher(signalStore, address);
-  const message = await cipher.encrypt(msg.buffer.slice(msg.byteOffset, msg.byteOffset + msg.byteLength));
-  const serialized = message.serialize();
+  const message = await cipher.encrypt(asArrayBuffer(msg));
+  const body = message.body ? binaryStringToUint8Array(message.body) : new Uint8Array();
+  const serialized = new Uint8Array(1 + body.length);
+  serialized[0] = message.type;
+  serialized.set(body, 1);
   const ivMarker = new Uint8Array([message.type]);
-  const sessionState = signalStore.loadSession(address);
+  const sessionState = await signalStore.loadSession(address.toString());
   if (sessionState) {
     await persistSession(address, sessionState);
   }
-  return { id: ulid(), ivB64: toBase64(ivMarker), ctB64: toBase64(new Uint8Array(serialized)) };
+  return { id: ulid(), ivB64: toBase64(ivMarker), ctB64: toBase64(serialized) };
 }
 
 export async function decryptFrom(peerPub: string, env: { ivB64: string; ctB64: string }): Promise<Uint8Array> {
@@ -274,11 +208,11 @@ export async function decryptFrom(peerPub: string, env: { ivB64: string; ctB64: 
   const payload = fromBase64(env.ctB64);
   let plaintext: ArrayBuffer;
   if (typeMarker[0] === 3) {
-    plaintext = await cipher.decryptPreKeyWhisperMessage(payload.buffer, 'binary');
+    plaintext = await cipher.decryptPreKeyWhisperMessage(asArrayBuffer(payload));
   } else {
-    plaintext = await cipher.decryptWhisperMessage(payload.buffer, 'binary');
+    plaintext = await cipher.decryptWhisperMessage(asArrayBuffer(payload));
   }
-  const sessionState = signalStore.loadSession(address);
+  const sessionState = await signalStore.loadSession(address.toString());
   if (sessionState) {
     await persistSession(address, sessionState);
   }
