@@ -5,5 +5,13 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "source": "src/index.ts",
-  "scripts": { "build": "tsc -b", "clean": "rimraf dist" }
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@pichat/types": "*",
+    "@pichat/utils": "*",
+    "realm": "^12.11.0"
+  }
 }
