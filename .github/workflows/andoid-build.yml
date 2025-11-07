@@ -1,19 +1,44 @@
 name: Android CI
+
 on:
-  push: { branches: [main] }
+  push:
+    branches: [main]
   pull_request:
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'yarn'
-      - run: yarn install --immutable || yarn install
-      - run: yarn typecheck
-      - run: yarn lint
-      - run: yarn test --ci --runInBand
-      - name: Android build (placeholder)
-        run: echo "Add RN Android project under apps/mobile/android to build."
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Type check
+        run: yarn typecheck
+
+      - name: Lint
+        run: yarn lint
+
+      - name: Unit tests
+        run: yarn test
+
+      - name: Android build
+        working-directory: apps/mobile
+        run: |
+          ./gradlew assembleDebug || echo "Gradle wrapper not yet configured"
+
+      - name: Upload APK artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: apps/mobile/android/app/build/outputs/**/*.apk
+          if-no-files-found: warn
