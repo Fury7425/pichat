@@ -49,5 +49,9 @@ export async function open(passphrase: string, blob: Uint8Array): Promise<Uint8A
   const ciphertext = blob.slice(1 + SALT_LENGTH + NONCE_LENGTH);
   const key = await deriveKey(passphrase, salt);
   const cipher = new XChaCha20Poly1305(key);
-  return cipher.open(nonce, ciphertext);
+  const opened = cipher.open(nonce, ciphertext);
+  if (!opened) {
+    throw new Error('invalid recovery payload');
+  }
+  return opened;
 }
