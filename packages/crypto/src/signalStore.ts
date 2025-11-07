@@ -1,14 +1,54 @@
-import { SignalProtocolAddress, SignalProtocolStore, KeyPairType } from 'libsignal-protocol-typescript';
+import { SignalProtocolAddress, StorageType, KeyPairType, Direction } from 'libsignal-protocol-typescript';
 import { repo } from '@pichat/storage';
 import { now, ulid } from '@pichat/utils';
 import { loadSecret, storeSecret, deleteSecret } from './keychain';
 import { IdentityRecord, PreKeyRecord, StoredSessionRecord } from '@pichat/types';
 
-type Value = ArrayBuffer | KeyPairType | number | string | undefined;
-
 type PreKeyEntry = { type: 'one-time' | 'signed'; record: KeyPairType; ref: string };
 
-export class RealmSignalProtocolStore implements SignalProtocolStore {
+type Value = ArrayBuffer | KeyPairType | number | string | PreKeyEntry | undefined;
+
+function ensureArrayBuffer(data: Uint8Array): ArrayBuffer {
+  if (data.buffer instanceof ArrayBuffer) {
+    return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+  }
+  const copy = new Uint8Array(data.byteLength);
+  copy.set(data);
+  return copy.buffer;
+}
+
+function buffersEqual(a: ArrayBuffer, b: ArrayBuffer): boolean {
+  if (a.byteLength !== b.byteLength) {
+    return false;
+  }
+  const viewA = new Uint8Array(a);
+  const viewB = new Uint8Array(b);
+  for (let i = 0; i < viewA.length; i += 1) {
+    if (viewA[i] !== viewB[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function binaryToArrayBuffer(binary: string): ArrayBuffer {
+  const view = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    view[i] = binary.charCodeAt(i) & 0xff;
+  }
+  return view.buffer;
+}
+
+function arrayBufferToBinary(buffer: ArrayBuffer): string {
+  const view = new Uint8Array(buffer);
+  let result = '';
+  for (let i = 0; i < view.length; i += 1) {
+    result += String.fromCharCode(view[i]);
+  }
+  return result;
+}
+
+export class RealmSignalProtocolStore implements StorageType {
   private backing = new Map<string, Value>();
 
   private identity?: IdentityRecord;
@@ -22,8 +62,8 @@ export class RealmSignalProtocolStore implements SignalProtocolStore {
       }
       this.identity = identity;
       this.backing.set('identityKey', {
-        pubKey: toArrayBuffer(secret.slice(32)),
-        privKey: toArrayBuffer(secret.slice(0, 32))
+        pubKey: ensureArrayBuffer(secret.slice(32)),
+        privKey: ensureArrayBuffer(secret.slice(0, 32))
       } as KeyPairType);
       this.backing.set('registrationId', identity.registrationId);
     }
@@ -49,16 +89,7 @@ export class RealmSignalProtocolStore implements SignalProtocolStore {
     }
     this.identity = undefined;
     this.backing.delete('identityKey');
-    this.backing.delete('registrationId');
-  }
-
-  async storePreKeyRecord(record: PreKeyRecord, keyPair: KeyPairType, serialized: Uint8Array): Promise<void> {
-    if (record.type === 'signed') {
-      await repo.prekeys.rotateSigned(record);
-    } else {
-      await repo.prekeys.addMany([
-        {
-          ...record,
+@@ -62,168 +102,148 @@ export class RealmSignalProtocolStore implements SignalProtocolStore {
           createdAt: record.createdAt
         }
       ]);
@@ -84,109 +115,89 @@ export class RealmSignalProtocolStore implements SignalProtocolStore {
     return record;
   }
 
-  get<T>(key: string, defaultValue?: T): T {
-    const value = this.backing.get(key);
-    if (value === undefined) {
-      return defaultValue as T;
-    }
-    return value as T;
+  private getValue<T extends Value>(key: string): T | undefined {
+    return this.backing.get(key) as T | undefined;
   }
 
-  put<T>(key: string, value: T): void {
-    this.backing.set(key, value as unknown as Value);
+  async getIdentityKeyPair(): Promise<KeyPairType | undefined> {
+    return this.getValue<KeyPairType>('identityKey');
   }
 
-  remove(key: string): void {
-    this.backing.delete(key);
+  async getLocalRegistrationId(): Promise<number | undefined> {
+    return this.getValue<number>('registrationId');
   }
 
-  getIdentityKeyPair(): KeyPairType | undefined {
-    return this.get<KeyPairType>('identityKey');
-  }
-
-  getLocalRegistrationId(): number | undefined {
-    return this.get<number>('registrationId');
-  }
-
-  storeIdentityKeyPair(keyPair: KeyPairType): void {
+  async storeIdentityKeyPair(keyPair: KeyPairType): Promise<void> {
     this.backing.set('identityKey', keyPair);
   }
 
-  storeLocalRegistrationId(id: number): void {
+  async storeLocalRegistrationId(id: number): Promise<void> {
     this.backing.set('registrationId', id);
   }
 
-  isTrustedIdentity(address: SignalProtocolAddress, identityKey: ArrayBuffer, _direction: 'incoming' | 'outgoing'): boolean {
-    const existing = this.getIdentity(address.toString());
+  async isTrustedIdentity(identifier: string, identityKey: ArrayBuffer, _direction: Direction): Promise<boolean> {
+    const existing = this.getValue<ArrayBuffer>(`identityKey:${identifier}`);
     if (!existing) {
       return true;
     }
-    return Buffer.compare(Buffer.from(existing), Buffer.from(identityKey)) === 0;
+    return buffersEqual(existing, identityKey);
   }
 
-  getIdentity(address: string): ArrayBuffer | undefined {
-    return this.get<ArrayBuffer>(`identityKey:${address}`);
+  async saveIdentity(identifier: string, key: ArrayBuffer): Promise<boolean> {
+    const existing = this.getValue<ArrayBuffer>(`identityKey:${identifier}`);
+    this.backing.set(`identityKey:${identifier}`, key);
+    return !!existing && !buffersEqual(existing, key);
   }
 
-  saveIdentity(address: string, key: ArrayBuffer): boolean {
-    const existing = this.get<ArrayBuffer>(`identityKey:${address}`);
-    this.put(`identityKey:${address}`, key);
-    return !!existing && Buffer.compare(Buffer.from(existing), Buffer.from(key)) !== 0;
+  async loadPreKey(keyId: number | string): Promise<KeyPairType | undefined> {
+    const entry = this.getValue<PreKeyEntry>(this.preKeyKey(keyId));
+    return entry?.record;
   }
 
-  storePreKey(keyId: number, keyPair: KeyPairType): void {
+  async storePreKey(keyId: number | string, keyPair: KeyPairType): Promise<void> {
     this.backing.set(this.preKeyKey(keyId), { type: 'one-time', record: keyPair, ref: `prekey-${keyId}` });
   }
 
-  loadPreKey(keyId: number): KeyPairType | undefined {
-    const entry = this.backing.get(this.preKeyKey(keyId)) as PreKeyEntry | undefined;
-    return entry?.record;
-  }
-
-  removePreKey(keyId: number): void {
+  async removePreKey(keyId: number | string): Promise<void> {
     this.backing.delete(this.preKeyKey(keyId));
   }
 
-  storeSignedPreKey(keyId: number, keyPair: KeyPairType): void {
-    this.backing.set(this.signedPreKeyKey(keyId), { type: 'signed', record: keyPair, ref: `signed-${keyId}` });
-  }
-
-  loadSignedPreKey(keyId: number): KeyPairType | undefined {
-    const entry = this.backing.get(this.signedPreKeyKey(keyId)) as PreKeyEntry | undefined;
+  async loadSignedPreKey(keyId: number | string): Promise<KeyPairType | undefined> {
+    const entry = this.getValue<PreKeyEntry>(this.signedPreKeyKey(keyId));
     return entry?.record;
   }
 
-  removeSignedPreKey(keyId: number): void {
+  async storeSignedPreKey(keyId: number | string, keyPair: KeyPairType): Promise<void> {
+    this.backing.set(this.signedPreKeyKey(keyId), { type: 'signed', record: keyPair, ref: `signed-${keyId}` });
+  }
+
+  async removeSignedPreKey(keyId: number | string): Promise<void> {
     this.backing.delete(this.signedPreKeyKey(keyId));
   }
 
-  loadSession(address: SignalProtocolAddress): ArrayBuffer | undefined {
-    return this.get<ArrayBuffer>(`session:${address.toString()}`);
+  async loadSession(address: string): Promise<string | undefined> {
+    return this.getValue<string>(`session:${address}`);
   }
 
-  storeSession(address: SignalProtocolAddress, record: ArrayBuffer): void {
-    this.put(`session:${address.toString()}`, record);
+  async storeSession(address: string, record: string): Promise<void> {
+    this.backing.set(`session:${address}`, record);
   }
 
-  containsSession(address: SignalProtocolAddress): boolean {
+  async containsSession(address: SignalProtocolAddress): Promise<boolean> {
     return this.backing.has(`session:${address.toString()}`);
   }
 
-  removeSession(address: SignalProtocolAddress): void {
-    this.backing.delete(`session:${address.toString()}`);
+  async removeSession(address: string): Promise<void> {
+    this.backing.delete(`session:${address}`);
   }
 
-  private preKeyKey(keyId: number): string {
+  private preKeyKey(keyId: number | string): string {
     return `preKey:${keyId}`;
   }
 
-  private signedPreKeyKey(keyId: number): string {
+  private signedPreKeyKey(keyId: number | string): string {
     return `signedPreKey:${keyId}`;
   }
-}
-
-function toArrayBuffer(data: Uint8Array): ArrayBuffer {
-  return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
 }
 
 export async function hydrateStoreWithSessions(store: RealmSignalProtocolStore): Promise<void> {
@@ -195,12 +206,12 @@ export async function hydrateStoreWithSessions(store: RealmSignalProtocolStore):
     const session = await repo.sessions.getByRemote(contact.publicKey);
     if (session) {
       const address = new SignalProtocolAddress(contact.publicKey, 1);
-      store.storeSession(address, session.sessionState);
+      await store.storeSession(address.toString(), arrayBufferToBinary(session.sessionState));
     }
   }
 }
 
-export async function persistSession(address: SignalProtocolAddress, record: ArrayBuffer): Promise<void> {
+export async function persistSession(address: SignalProtocolAddress, record: string): Promise<void> {
   const contact = await repo.contacts.getByPub(address.getName());
   if (!contact) {
     throw new Error('contact missing for session');
@@ -212,7 +223,7 @@ export async function persistSession(address: SignalProtocolAddress, record: Arr
     remotePublicKey: contact.publicKey,
     createdAt: existing?.createdAt ?? now(),
     updatedAt: now(),
-    sessionState: record
+    sessionState: binaryToArrayBuffer(record)
   };
   await repo.sessions.save(stored);
 }
