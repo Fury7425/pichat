@@ -1,0 +1,36 @@
++name: Android CI
++
++on:
++  push:
++    branches: [main]
++  pull_request:
++
++jobs:
++  build:
++    runs-on: ubuntu-latest
++    steps:
++      - uses: actions/checkout@v4
++      - uses: actions/setup-node@v4
++        with:
++          node-version: '20'
++          cache: 'yarn'
++      - name: Install dependencies
++        run: yarn install --immutable || yarn install
++      - name: Typecheck
++        run: yarn typecheck
++      - name: Lint
++        run: yarn lint
++      - name: Unit tests
++        run: yarn test --ci --runInBand
++      - name: Android build
++        working-directory: apps/mobile
++        run: |
++          cd android || exit 0
++          ./gradlew assembleDebug
++      - name: Upload APK
++        if: success()
++        uses: actions/upload-artifact@v4
++        with:
++          name: android-apk
++          path: apps/mobile/android/app/build/outputs/**/*.apk
++          if-no-files-found: ignore
