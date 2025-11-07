@@ -8,6 +8,6 @@ export function useSession(peerPublicKey?: string): void {
     if (!peerPublicKey) {
       return;
     }
-    ensureSession(peerPublicKey).catch((error) => logger.error('ensureSession failed', error));
+    ensureSession(peerPublicKey).catch((error: unknown) => logger.error('ensureSession failed', error));
   }, [peerPublicKey, logger]);
 }

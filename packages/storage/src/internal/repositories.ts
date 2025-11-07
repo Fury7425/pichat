@@ -383,6 +383,7 @@ export const repo = {
       });
     },
     async popOneTime(): Promise<PreKeyRecord | undefined> {
+      const realm = await getRealm();
       const preKey = realm
         .objects<PreKey>('PreKey')
         .filtered('type == $0 AND consumedAt == null', 'one-time')
@@ -438,6 +439,19 @@ export const repo = {
           updatedAt: session.updatedAt,
           sessionState: session.sessionState
         }, Realm.UpdateMode.Modified);
+      });
+    },
+    async getByRemote(remotePublicKey: string): Promise<StoredSessionRecord | undefined> {
+      const realm = await getRealm();
+      const session = realm.objects<StoredSession>('StoredSession').filtered('remotePublicKey == $0', remotePublicKey)[0];
+      return session ? mapSession(session) : undefined;
+    },
+    async remove(id: string): Promise<void> {
+      await write((realm) => {
+        const existing = realm.objectForPrimaryKey<StoredSession>('StoredSession', id);
+        if (existing) {
+          realm.delete(existing);
+        }
       });
     }
   }
