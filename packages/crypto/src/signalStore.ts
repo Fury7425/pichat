@@ -17,6 +17,15 @@ function ensureArrayBuffer(data: Uint8Array): ArrayBuffer {
   return copy.buffer;
 }
 
+function deserializeKeyPair(serialized: Uint8Array): KeyPairType {
+  const priv = ensureArrayBuffer(serialized.slice(0, 32));
+  const pub = ensureArrayBuffer(serialized.slice(32));
+  return {
+    privKey: priv,
+    pubKey: pub
+  } as KeyPairType;
+}
+
 function buffersEqual(a: ArrayBuffer, b: ArrayBuffer): boolean {
   if (a.byteLength !== b.byteLength) {
     return false;
@@ -54,6 +63,7 @@ export class RealmSignalProtocolStore implements StorageType {
   private identity?: IdentityRecord;
 
   async hydrate(): Promise<void> {
+    this.backing.clear();
     const identity = await repo.getIdentity();
     if (identity) {
       const secret = await loadSecret(identity.privateKeyRef);
@@ -61,11 +71,25 @@ export class RealmSignalProtocolStore implements StorageType {
         throw new Error('identity secret missing');
       }
       this.identity = identity;
-      this.backing.set('identityKey', {
-        pubKey: ensureArrayBuffer(secret.slice(32)),
-        privKey: ensureArrayBuffer(secret.slice(0, 32))
-      } as KeyPairType);
+      this.backing.set('identityKey', deserializeKeyPair(secret));
       this.backing.set('registrationId', identity.registrationId);
+    } else {
+      this.identity = undefined;
+    }
+
+    const storedPreKeys = await repo.prekeys.listAll();
+    for (const record of storedPreKeys) {
+      const serialized = await loadSecret(record.privateKeyRef);
+      if (!serialized) {
+        throw new Error(`missing prekey secret: ${record.keyId}`);
+      }
+      const keyPair = deserializeKeyPair(serialized);
+      if (record.type === 'signed') {
+        await this.storeSignedPreKey(record.keyId, keyPair);
+      } else {
+        await this.storePreKey(record.keyId, keyPair);
+      }
+      this.backing.set(this.metaKey(record.keyId), { type: record.type, record: keyPair, ref: record.privateKeyRef });
     }
   }
 
@@ -89,17 +113,33 @@ export class RealmSignalProtocolStore implements StorageType {
     }
     this.identity = undefined;
     this.backing.delete('identityKey');
-@@ -62,168 +102,148 @@ export class RealmSignalProtocolStore implements SignalProtocolStore {
-          createdAt: record.createdAt
-        }
-      ]);
+    this.backing.delete('registrationId');
+  }
+
+  async clearPreKeys(): Promise<void> {
+    for (const [key, value] of Array.from(this.backing.entries())) {
+      if (key.startsWith('preKeyMeta:')) {
+        const entry = value as PreKeyEntry;
+        await deleteSecret(entry.ref);
+        const id = key.slice('preKeyMeta:'.length);
+        this.backing.delete(`preKey:${id}`);
+        this.backing.delete(`signedPreKey:${id}`);
+        this.backing.delete(key);
+      }
+    }
+    await repo.prekeys.clearAll();
+  }
+
+  async storePreKeyRecord(record: PreKeyRecord, keyPair: KeyPairType, serialized: Uint8Array): Promise<void> {
+    if (record.type === 'signed') {
+      await repo.prekeys.rotateSigned(record);
+      await this.storeSignedPreKey(record.keyId, keyPair);
+    } else {
+      await repo.prekeys.addMany([record]);
+      await this.storePreKey(record.keyId, keyPair);
     }
     await storeSecret(record.privateKeyRef, serialized);
-    this.backing.set(this.preKeyKey(record.keyId), {
-      type: record.type,
-      record: keyPair,
-      ref: record.privateKeyRef
-    });
+    this.backing.set(this.metaKey(record.keyId), { type: record.type, record: keyPair, ref: record.privateKeyRef });
   }
 
   async popOneTimePreKey(): Promise<PreKeyRecord | undefined> {
@@ -107,11 +147,9 @@ export class RealmSignalProtocolStore implements StorageType {
     if (!record) {
       return undefined;
     }
-    const serialized = await loadSecret(record.privateKeyRef);
-    if (!serialized) {
-      throw new Error('missing prekey secret');
-    }
+    await deleteSecret(record.privateKeyRef);
     this.backing.delete(this.preKeyKey(record.keyId));
+    this.backing.delete(this.metaKey(record.keyId));
     return record;
   }
 
@@ -150,29 +188,37 @@ export class RealmSignalProtocolStore implements StorageType {
   }
 
   async loadPreKey(keyId: number | string): Promise<KeyPairType | undefined> {
-    const entry = this.getValue<PreKeyEntry>(this.preKeyKey(keyId));
-    return entry?.record;
+    return this.getValue<KeyPairType>(this.preKeyKey(keyId));
   }
 
   async storePreKey(keyId: number | string, keyPair: KeyPairType): Promise<void> {
-    this.backing.set(this.preKeyKey(keyId), { type: 'one-time', record: keyPair, ref: `prekey-${keyId}` });
+    this.backing.set(this.preKeyKey(keyId), keyPair);
   }
 
   async removePreKey(keyId: number | string): Promise<void> {
+    const meta = this.getValue<PreKeyEntry>(this.metaKey(keyId));
+    if (meta?.type === 'one-time') {
+      await deleteSecret(meta.ref);
+    }
     this.backing.delete(this.preKeyKey(keyId));
+    this.backing.delete(this.metaKey(keyId));
   }
 
   async loadSignedPreKey(keyId: number | string): Promise<KeyPairType | undefined> {
-    const entry = this.getValue<PreKeyEntry>(this.signedPreKeyKey(keyId));
-    return entry?.record;
+    return this.getValue<KeyPairType>(this.signedPreKeyKey(keyId));
   }
 
   async storeSignedPreKey(keyId: number | string, keyPair: KeyPairType): Promise<void> {
-    this.backing.set(this.signedPreKeyKey(keyId), { type: 'signed', record: keyPair, ref: `signed-${keyId}` });
+    this.backing.set(this.signedPreKeyKey(keyId), keyPair);
   }
 
   async removeSignedPreKey(keyId: number | string): Promise<void> {
+    const meta = this.getValue<PreKeyEntry>(this.metaKey(keyId));
+    if (meta?.type === 'signed') {
+      await deleteSecret(meta.ref);
+    }
     this.backing.delete(this.signedPreKeyKey(keyId));
+    this.backing.delete(this.metaKey(keyId));
   }
 
   async loadSession(address: string): Promise<string | undefined> {
@@ -197,6 +243,10 @@ export class RealmSignalProtocolStore implements StorageType {
 
   private signedPreKeyKey(keyId: number | string): string {
     return `signedPreKey:${keyId}`;
+  }
+
+  private metaKey(keyId: number | string): string {
+    return `preKeyMeta:${keyId}`;
   }
 }
 
@@ -223,18 +273,3 @@ export async function persistSession(address: SignalProtocolAddress, record: str
     remotePublicKey: contact.publicKey,
     createdAt: existing?.createdAt ?? now(),
     updatedAt: now(),
-    sessionState: binaryToArrayBuffer(record)
-  };
-  await repo.sessions.save(stored);
-}
-
-export async function removeSession(address: SignalProtocolAddress): Promise<void> {
-  const contact = await repo.contacts.getByPub(address.getName());
-  if (!contact) {
-    return;
-  }
-  const existing = await repo.sessions.getByRemote(contact.publicKey);
-  if (existing) {
-    await repo.sessions.remove(existing.id);
-  }
-}
