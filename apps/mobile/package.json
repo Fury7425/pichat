@@ -21,8 +21,11 @@
     "@pichat/utils": "*",
     "@react-navigation/native": "^7.0.5",
     "@react-navigation/native-stack": "^7.0.5",
+    "expo-clipboard": "^8.0.7",
     "react": "18.2.0",
     "react-native": "0.76.0",
+    "react-native-keychain": "^8.1.2",
+    "realm": "^12.11.0",
     "react-native-safe-area-context": "^4.10.5",
     "react-native-screens": "^4.8.1",
     "zustand": "^4.5.2"
@@ -32,7 +35,7 @@
     "@babel/runtime": "^7.25.0",
     "@react-native/babel-preset": "^0.76.1",
     "babel-jest": "^29.7.0",
-    "metro-react-native-babel-preset": "^0.78.7",
+    "metro-react-native-babel-preset": "^0.77.0",
     "jest": "^29.7.0",
     "react-test-renderer": "18.2.0",
     "typescript": "^5.6.3"
