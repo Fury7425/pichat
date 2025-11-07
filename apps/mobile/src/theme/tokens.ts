@@ -1,4 +1,4 @@
-import tokensJson from '../../../design/figma-tokens.json';
+import tokensJson from './figmaTokens';
 
 type TokensJson = typeof tokensJson;
 
