@@ -5,6 +5,12 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "source": "src/index.ts",
-  "scripts": { "build": "tsc -b", "clean": "rimraf dist" },
-  "dependencies": { "@noble/hashes": "^1.4.0" }
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@pichat/utils": "*",
+    "@waku/sdk": "^0.0.36"
+  }
 }
