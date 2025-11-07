@@ -8,6 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,16 +31,38 @@ jobs:
       - name: Unit tests
         run: yarn test
 
-      - name: Android build
-        working-directory: apps/mobile
+      # --- Android toolchain ---
+      - name: Set up Java (Temurin 17)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      # Only attempt build if the Gradle wrapper exists
+      - name: Android build (assembleDebug)
+        if: hashFiles('apps/mobile/android/gradlew') != ''
+        working-directory: apps/mobile/android
+        env:
+          JAVA_HOME: ${{ steps.setup-java.outputs.path }}
+          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
+          GRADLE_OPTS: -Dorg.gradle.daemon=false
         run: |
-          ./gradlew assembleDebug || echo "Gradle wrapper not yet configured"
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug
 
       - name: Upload APK artifact
-        if: success()
+        if: hashFiles('apps/mobile/android/app/build/outputs/apk/debug/*.apk') != ''
         uses: actions/upload-artifact@v4
         with:
           name: android-apk
-          path: apps/mobile/android/app/build/outputs/**/*.apk
+          path: apps/mobile/android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: warn
 
+      - name: Note if Android project missing
+        if: hashFiles('apps/mobile/android/gradlew') == ''
+        run: |
+          echo "::warning::No Android project found at apps/mobile/android (gradlew missing). Skipping build."
