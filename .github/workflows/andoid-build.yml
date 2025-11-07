@@ -42,3 +42,4 @@ jobs:
           name: android-apk
           path: apps/mobile/android/app/build/outputs/**/*.apk
           if-no-files-found: warn
+
