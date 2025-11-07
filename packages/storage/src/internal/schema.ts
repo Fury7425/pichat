@@ -15,7 +15,7 @@ export class Identity extends Realm.Object<Identity> {
     primaryKey: '_id',
     properties: {
       _id: 'string',
-      publicKey: 'string',
+      publicKey: { type: 'string', indexed: true },
       privateKeyRef: 'string',
       fingerprint: 'string',
       registrationId: 'int',
@@ -60,8 +60,7 @@ export class Contact extends Realm.Object<Contact> {
       preKeySignature: 'string?',
       preKeyOneTimeId: 'int?',
       preKeyOneTime: 'string?'
-    },
-    indexes: ['publicKey']
+    }
   };
 }
 
@@ -81,16 +80,15 @@ export class Conversation extends Realm.Object<Conversation> {
     primaryKey: '_id',
     properties: {
       _id: 'string',
-      contactId: 'string',
-      topic: 'string',
+      contactId: { type: 'string', indexed: true },
+      topic: { type: 'string', indexed: true },
       unreadCount: 'int',
       lastMessageId: 'string?',
       lastMessageAt: 'int?',
       createdAt: 'int',
-      updatedAt: 'int',
+      updatedAt: { type: 'int', indexed: true },
       mutedUntil: 'int?'
-    },
-    indexes: ['topic', 'contactId', 'updatedAt']
+    }
   };
 }
 
@@ -112,18 +110,17 @@ export class Message extends Realm.Object<Message> {
     primaryKey: '_id',
     properties: {
       _id: 'string',
-      conversationId: 'string',
+      conversationId: { type: 'string', indexed: true },
       senderPublicKey: 'string',
       cipherTextB64: 'string',
       ivB64: 'string',
-      sentAt: 'int',
+      sentAt: { type: 'int', indexed: true },
       receivedAt: 'int?',
       decryptedText: 'string?',
       status: 'string',
       deliveryId: 'string?',
       ratchetCounter: 'int?'
-    },
-    indexes: ['conversationId', 'sentAt']
+    }
   };
 }
 
@@ -142,15 +139,14 @@ export class Attachment extends Realm.Object<Attachment> {
     primaryKey: '_id',
     properties: {
       _id: 'string',
-      conversationId: 'string',
-      messageId: 'string',
+      conversationId: { type: 'string', indexed: true },
+      messageId: { type: 'string', indexed: true },
       mimeType: 'string',
       size: 'int',
       remoteUrl: 'string?',
       localUri: 'string?',
       createdAt: 'int'
-    },
-    indexes: ['conversationId', 'messageId']
+    }
   };
 }
 
@@ -168,14 +164,13 @@ export class PreKey extends Realm.Object<PreKey> {
     primaryKey: '_id',
     properties: {
       _id: 'string',
-      keyId: 'int',
-      type: 'string',
+      keyId: { type: 'int', indexed: true },
+      type: { type: 'string', indexed: true },
       publicKey: 'string',
       privateKeyRef: 'string',
       createdAt: 'int',
       consumedAt: 'int?'
-    },
-    indexes: ['keyId', 'type']
+    }
   };
 }
 
@@ -192,13 +187,12 @@ export class StoredSession extends Realm.Object<StoredSession> {
     primaryKey: '_id',
     properties: {
       _id: 'string',
-      contactId: 'string',
-      remotePublicKey: 'string',
+      contactId: { type: 'string', indexed: true },
+      remotePublicKey: { type: 'string', indexed: true },
       createdAt: 'int',
       updatedAt: 'int',
       sessionState: 'data'
-    },
-    indexes: ['contactId', 'remotePublicKey']
+    }
   };
 }
 
