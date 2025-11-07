@@ -32,9 +32,8 @@ jobs:
 
       - name: Check Android project
         id: android-check
-        working-directory: apps/mobile
         run: |
-          if [ -d android ] && [ -f gradlew ]; then
+          if [ -d apps/mobile/android ] && [ -f apps/mobile/android/gradlew ]; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
@@ -42,9 +41,8 @@ jobs:
 
       - name: Android build
         if: steps.android-check.outputs.exists == 'true'
-        working-directory: apps/mobile
-        run: |
-          ./gradlew assembleDebug || echo "Gradle wrapper not yet configured"
+        working-directory: apps/mobile/android
+        run: ./gradlew assembleDebug
 
       - name: Upload APK artifact
         if: success() && steps.android-check.outputs.exists == 'true' && hashFiles('apps/mobile/android/app/build/outputs/**/*.apk') != ''
