@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "PiChat",
+    "slug": "pichat",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "platforms": ["android"],
+    "entryPoint": "./index.js",
+    "android": {
+      "package": "com.pichat.mobile"
+    }
+  }
+}
